@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>角色替换 & 跟拍应用 · 质量标注工作台</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">🎬</span>
+      <div>
+        <h1>角色替换 / 跟拍应用 · 质量标注工作台</h1>
+        <p class="subtitle">8 维度评分系统 · 高质量快筛 · Reward Model 数据标注</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <div class="mode-switch">
+        <button id="modeQuick" class="mode-btn active">⚡ 高质量快筛</button>
+        <button id="modeFull" class="mode-btn">📋 全维度评分</button>
+      </div>
+      <button id="btnRef" class="icon-btn" title="标注标准参考">📖</button>
+    </div>
+  </header>
+  <main class="layout">
+    <section class="panel-left">
+      <div class="video-card">
+        <div class="card-head"><h2>视频预览</h2><span id="videoMeta" class="meta"></span></div>
+        <div class="video-area" id="videoArea">
+          <video id="videoPlayer" controls playsinline></video>
+          <div class="video-placeholder" id="videoPlaceholder">
+            <div class="ph-icon">📹</div>
+            <p>拖拽视频到此处，或点击下方按钮上传</p>
+            <p class="hint">支持 MP4 / WebM / MOV</p>
+          </div>
+        </div>
+        <div class="video-actions">
+          <label class="btn primary">
+            <input type="file" id="fileInput" accept="video/*" hidden>📁 上传视频
+          </label>
+          <div class="url-input">
+            <input type="text" id="videoUrl" placeholder="或粘贴视频 URL">
+            <button class="btn" id="btnLoadUrl">加载</button>
+          </div>
+        </div>
+        <div class="task-info">
+          <label>任务 ID / 文件名</label>
+          <input type="text" id="taskId" placeholder="例如：task_001 或 文件名">
+        </div>
+      </div>
+      <div class="progress-card">
+        <div class="card-head">
+          <h2>批次进度</h2>
+          <button class="btn small" id="btnNewTask">+ 新建标注</button>
+        </div>
+        <div class="stats">
+          <div class="stat"><span class="num" id="statTotal">0</span><span class="label">总数</span></div>
+          <div class="stat"><span class="num" id="statDone">0</span><span class="label">已完成</span></div>
+          <div class="stat"><span class="num" id="statPass">0</span><span class="label">高质量</span></div>
+          <div class="stat"><span class="num" id="statSkip">0</span><span class="label">已过滤</span></div>
+        </div>
+        <div class="task-list" id="taskList"></div>
+        <div class="export-bar">
+          <button class="btn" id="btnExportJSON">⬇ 导出 JSON</button>
+          <button class="btn" id="btnExportCSV">⬇ 导出 CSV</button>
+          <button class="btn danger" id="btnClearAll">🗑 清空</button>
+        </div>
+      </div>
+    </section>
+    <section class="panel-right" id="annotationPanel">
+      <div id="quickMode" class="mode-panel">
+        <div class="panel-head">
+          <h2>⚡ 高质量快筛</h2>
+          <p class="panel-desc">勾选以下任一问题即判定为非高质量，跳过该数据。所有维度须为 4–5 分。</p>
+        </div>
+        <div class="exclusion-box">
+          <h3>🚫 排除项（命中任一即过滤）</h3>
+          <div class="check-grid" id="exclusionGrid"></div>
+        </div>
+        <div class="dim-quick" id="dimQuick"></div>
+        <div class="notes-box">
+          <label>备注（可选）</label>
+          <textarea id="quickNotes" rows="2" placeholder="补充说明..."></textarea>
+        </div>
+        <div class="action-bar">
+          <button class="btn success large" id="btnQuickPass">✅ 判定为高质量</button>
+          <button class="btn warning large" id="btnQuickSkip">⏭ 过滤（非高质量）</button>
+        </div>
+      </div>
+      <div id="fullMode" class="mode-panel hidden">
+        <div class="panel-head">
+          <h2>📋 全维度评分</h2>
+          <p class="panel-desc">对 8 个维度逐项评分并勾选具体问题，用于 Reward Model 训练数据标注。</p>
+        </div>
+        <div id="fullDims"></div>
+        <div class="action-bar">
+          <button class="btn success large" id="btnFullSave">💾 保存标注</button>
+          <button class="btn large" id="btnFullReset">↺ 重置</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="modal hidden" id="refModal">
+  <div class="modal-bg" data-close></div>
+  <div class="modal-box">
+    <div class="modal-head">
+      <h2>📖 标注标准参考</h2>
+      <button class="icon-btn" data-close>✕</button>
+    </div>
+    <div class="modal-body" id="refBody"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
