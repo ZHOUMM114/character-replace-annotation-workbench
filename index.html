@@ -24,10 +24,14 @@
       <button id="btnRef" class="icon-btn" title="标注标准参考">📖</button>
     </div>
   </header>
+
   <main class="layout">
     <section class="panel-left">
       <div class="video-card">
-        <div class="card-head"><h2>视频预览</h2><span id="videoMeta" class="meta"></span></div>
+        <div class="card-head">
+          <h2>视频预览</h2>
+          <span id="videoMeta" class="meta"></span>
+        </div>
         <div class="video-area" id="videoArea">
           <video id="videoPlayer" controls playsinline></video>
           <div class="video-placeholder" id="videoPlaceholder">
@@ -38,7 +42,8 @@
         </div>
         <div class="video-actions">
           <label class="btn primary">
-            <input type="file" id="fileInput" accept="video/*" hidden>📁 上传视频
+            <input type="file" id="fileInput" accept="video/*" hidden>
+            📁 上传视频
           </label>
           <div class="url-input">
             <input type="text" id="videoUrl" placeholder="或粘贴视频 URL">
@@ -50,6 +55,26 @@
           <input type="text" id="taskId" placeholder="例如：task_001 或 文件名">
         </div>
       </div>
+
+      <div class="progress-card">
+        <div class="card-head">
+          <h2>🎯 今日目标</h2>
+          <span class="meta" id="todayDate"></span>
+        </div>
+        <div class="daily-goal">
+          <div class="goal-bar">
+            <div class="goal-fill" id="goalFill"></div>
+            <span class="goal-text" id="goalText">0 / 200 条</span>
+          </div>
+          <div class="goal-stats">
+            <div class="gs"><span class="gs-val" id="todayCount">0</span><span class="gs-lbl">今日条数</span></div>
+            <div class="gs"><span class="gs-val money" id="todayMoney">¥0.00</span><span class="gs-lbl">今日收入</span></div>
+            <div class="gs"><span class="gs-val" id="avgTime">--</span><span class="gs-lbl">均耗时</span></div>
+            <div class="gs"><span class="gs-val" id="etaTime">--</span><span class="gs-lbl">预计达成</span></div>
+          </div>
+        </div>
+      </div>
+
       <div class="progress-card">
         <div class="card-head">
           <h2>批次进度</h2>
@@ -68,7 +93,16 @@
           <button class="btn danger" id="btnClearAll">🗑 清空</button>
         </div>
       </div>
+
+      <div class="shortcut-hint" id="shortcutHint">
+        <span class="sh-title">⌨ 快捷键</span>
+        <span class="sh-key"><kbd>P</kbd> 一键通过</span>
+        <span class="sh-key"><kbd>S</kbd> 过滤</span>
+        <span class="sh-key"><kbd>1-8</kbd> 排除项</span>
+        <span class="sh-key"><kbd>空格</kbd> 播放/暂停</span>
+      </div>
     </section>
+
     <section class="panel-right" id="annotationPanel">
       <div id="quickMode" class="mode-panel">
         <div class="panel-head">
