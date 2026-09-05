@@ -1,9 +1,11 @@
 /* ============================================================
    角色替换 & 跟拍应用 · 质量标注工作台
-   8 维度评分系统 + 高质量快筛
+   8 维度评分系统 + 高质量快筛 + 每日目标 + 键盘快捷键
    ============================================================ */
 
-// ---------- 数据模型：8 维度定义 ----------
+const DAILY_TARGET = 200;
+const PRICE_PER_TASK = 0.6;
+
 const DIMENSIONS = [
   { id: 1, name: "角色替换", short: "角色替换", desc: "替换后人物与目标 ID 的一致性，包括五官、脸型、妆容、发型、衰老、饰品等", scoring: "category", groups: [
     { name: "五官不一致", options: ["眉毛轻微差异","眼睛轻微差异","鼻子轻微差异","嘴轻微差异","耳朵轻微差异","眉毛明显差异","眼睛明显差异","鼻子明显差异","嘴明显差异","耳朵明显差异","眉毛不像","眼睛不像","鼻子不像","嘴不像","耳朵不像"] },
@@ -38,8 +40,7 @@ const DIMENSIONS = [
     { name: "核心动作看不到", options: ["角色被遮挡","角色没动"] }
   ]},
   { id: 6, name: "台词保持", short: "台词", desc: "台词内容的准确性（1-5 分）", scoring: "score15", scoreLevels: {
-    5: ["空（无问题）"],
-    4: ["有轻微漏字","轻微发音模糊","尾音被吃掉"],
+    5: ["空（无问题）"], 4: ["有轻微漏字","轻微发音模糊","尾音被吃掉"],
     3: ["口齿不清","明显发音模糊","尾音被吃掉","明显漏字","语气词变化，但语义基本一致"],
     2: ["口齿不清","乱讲台词","明显发音模糊","语气词明显变化"],
     1: ["旁白被人物讲出","台词内容严重变化","分不清谁在说话","语气大变"]
@@ -52,11 +53,9 @@ const DIMENSIONS = [
     { name: "背景音", options: ["轻微杂音，不影响分辨音频内容","明显杂音，难以分辨音频内容"] }
   ]},
   { id: 8, name: "口唇同步", short: "口唇", desc: "口型与台词的同步程度（1-5 分）", scoring: "score15", scoreLevels: {
-    5: ["无问题"],
-    4: ["口型动作轻微错误，但不影响后续的同步","开口时间轻微错位，只有1-2个单词提前/延后开口"],
+    5: ["无问题"], 4: ["口型动作轻微错误，但不影响后续的同步","开口时间轻微错位，只有1-2个单词提前/延后开口"],
     3: ["口型短时间内错误，但人物能在台词播放期间保持开口","一句话中有将近一半的内容提前/延后作出相应口型动作","口型动作不正确，有明显的音画不同步感"],
-    2: ["口型长时间错误，与台词内容基本完全错位","部分台词播放期间人物没有开口"],
-    1: ["音轨放错了"]
+    2: ["口型长时间错误，与台词内容基本完全错位","部分台词播放期间人物没有开口"], 1: ["音轨放错了"]
   }}
 ];
 
@@ -73,12 +72,35 @@ const EXCLUSIONS = [
 
 const QUICK_PASS_SCORES = [4, 5];
 
-let state = { mode: "quick", currentTaskId: null, tasks: loadTasks(), quick: { exclusions: {}, dimScores: {}, notes: "" }, full: {} };
+let state = {
+  mode: "quick",
+  currentTaskId: null,
+  tasks: loadTasks(),
+  quick: { exclusions: {}, dimScores: {}, notes: "" },
+  full: {},
+  taskStartTime: Date.now(),
+  daily: loadDailyStats()
+};
 
+function todayStr() { return new Date().toISOString().slice(0, 10); }
 function loadTasks() { try { return JSON.parse(localStorage.getItem("anno_tasks") || "[]"); } catch { return []; } }
 function saveTasks() { localStorage.setItem("anno_tasks", JSON.stringify(state.tasks)); }
+function loadDailyStats() {
+  try {
+    const raw = JSON.parse(localStorage.getItem("anno_daily") || "{}");
+    const today = todayStr();
+    if (raw.date !== today) return { date: today, count: 0, totalTime: 0, timestamps: [] };
+    return raw;
+  } catch { return { date: todayStr(), count: 0, totalTime: 0, timestamps: [] }; }
+}
+function saveDailyStats() { localStorage.setItem("anno_daily", JSON.stringify(state.daily)); }
 
-document.addEventListener("DOMContentLoaded", () => { renderQuickMode(); renderFullMode(); renderTaskList(); updateStats(); bindEvents(); bindVideo(); });
+document.addEventListener("DOMContentLoaded", () => {
+  renderQuickMode(); renderFullMode(); renderTaskList(); updateStats();
+  updateDailyGoal(); bindEvents(); bindVideo(); bindKeyboard();
+  state.taskStartTime = Date.now();
+  document.getElementById("todayDate").textContent = todayStr();
+});
 
 function bindEvents() {
   document.getElementById("modeQuick").addEventListener("click", () => switchMode("quick"));
@@ -104,9 +126,45 @@ function switchMode(m) {
   document.getElementById("fullMode").classList.toggle("hidden", m !== "full");
 }
 
+function bindKeyboard() {
+  document.addEventListener("keydown", e => {
+    const tag = e.target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA") return;
+    const key = e.key.toLowerCase();
+    if (e.code === "Space") {
+      e.preventDefault();
+      const v = document.getElementById("videoPlayer");
+      if (v.src) { if (v.paused) v.play(); else v.pause(); }
+      return;
+    }
+    if (state.mode !== "quick") return;
+    if (key === "p") { e.preventDefault(); quickPassAll(); }
+    else if (key === "s") { e.preventDefault(); quickSave("skip"); }
+    else if (key >= "1" && key <= "8") { e.preventDefault(); toggleExclusion(parseInt(key) - 1); }
+  });
+}
+
+function toggleExclusion(idx) {
+  const ex = EXCLUSIONS[idx]; if (!ex) return;
+  state.quick.exclusions[ex.id] = !state.quick.exclusions[ex.id];
+  const el = document.querySelector(`.chk[data-id="${ex.id}"]`);
+  if (el) {
+    el.classList.toggle("checked", state.quick.exclusions[ex.id]);
+    el.querySelector("input").checked = state.quick.exclusions[ex.id];
+  }
+}
+
+function quickPassAll() {
+  DIMENSIONS.forEach(d => { state.quick.dimScores[d.id] = 5; });
+  document.querySelectorAll(".dim-row").forEach(row => {
+    row.querySelectorAll(".score-btn").forEach(b => b.classList.toggle("active", b.dataset.score === "5"));
+  });
+  quickSave("pass");
+}
+
 function renderQuickMode() {
   const grid = document.getElementById("exclusionGrid");
-  grid.innerHTML = EXCLUSIONS.map(e => `<label class="chk" data-id="${e.id}"><input type="checkbox"><span>${e.label}</span></label>`).join("");
+  grid.innerHTML = EXCLUSIONS.map((e, i) => `<label class="chk" data-id="${e.id}"><input type="checkbox"><span class="ex-idx">${i + 1}</span><span>${e.label}</span></label>`).join("");
   grid.querySelectorAll(".chk").forEach(el => {
     el.addEventListener("click", () => {
       const cb = el.querySelector("input"); cb.checked = !cb.checked;
@@ -135,14 +193,22 @@ function quickSave(result) {
   const allScored = DIMENSIONS.every(d => state.quick.dimScores[d.id] !== undefined);
   const allHigh = DIMENSIONS.every(d => QUICK_PASS_SCORES.includes(state.quick.dimScores[d.id]));
   if (result === "pass") {
-    if (hasExclusion) { toast("存在排除项，不能判定为高质量", "error"); return; }
+    if (hasExclusion) { toast("存在排除项，不能判定为高质量（按 S 过滤）", "error"); return; }
     if (!allScored) { toast("请为所有维度打分", "error"); return; }
     if (!allHigh) { toast("存在低于 4 分的维度，不能判定为高质量", "error"); return; }
   }
-  const task = { id: taskId, result, mode: "quick", scores: { ...state.quick.dimScores }, exclusions: { ...state.quick.exclusions }, notes: state.quick.notes, createdAt: new Date().toISOString(), videoMeta: currentVideoMeta() };
+  const elapsed = (Date.now() - state.taskStartTime) / 1000;
+  const task = { id: taskId, result, mode: "quick", scores: { ...state.quick.dimScores }, exclusions: { ...state.quick.exclusions }, notes: state.quick.notes, elapsedSec: elapsed, createdAt: new Date().toISOString(), videoMeta: currentVideoMeta() };
   upsertTask(task);
-  toast(result === "pass" ? "✅ 已保存为高质量" : "⏭ 已过滤", "success");
+  state.daily.count += 1;
+  state.daily.totalTime += elapsed;
+  state.daily.timestamps.push(Date.now());
+  saveDailyStats();
+  updateDailyGoal();
+  toast(result === "pass" ? "✅ 高质量 +1" : "⏭ 已过滤", "success");
   resetQuick();
+  state.taskStartTime = Date.now();
+  document.getElementById("taskId").focus();
 }
 
 function resetQuick() {
@@ -230,24 +296,49 @@ function renderTaskList() {
 
 function loadTask(id) { const t = state.tasks.find(x => x.id === id); if (!t) return; state.currentTaskId = id; document.getElementById("taskId").value = id; renderTaskList(); toast(`已加载任务：${id}`, "success"); }
 function deleteTask(id) { state.tasks = state.tasks.filter(t => t.id !== id); saveTasks(); renderTaskList(); updateStats(); }
-function newTask() { state.currentTaskId = null; document.getElementById("taskId").value = ""; if (state.mode === "quick") resetQuick(); else resetFull(); renderTaskList(); toast("已新建标注", "success"); }
+function newTask() { state.currentTaskId = null; document.getElementById("taskId").value = ""; if (state.mode === "quick") resetQuick(); else resetFull(); renderTaskList(); state.taskStartTime = Date.now(); toast("已新建标注", "success"); }
+
 function updateStats() {
   document.getElementById("statTotal").textContent = state.tasks.length;
   document.getElementById("statDone").textContent = state.tasks.filter(t => t.result !== "draft").length;
   document.getElementById("statPass").textContent = state.tasks.filter(t => t.result === "pass").length;
   document.getElementById("statSkip").textContent = state.tasks.filter(t => t.result === "skip").length;
 }
+
 function clearAll() { if (!confirm("确定清空所有标注数据？此操作不可恢复。")) return; state.tasks = []; saveTasks(); renderTaskList(); updateStats(); toast("已清空", "success"); }
+
+function updateDailyGoal() {
+  const count = state.daily.count;
+  const pct = Math.min(100, (count / DAILY_TARGET) * 100);
+  document.getElementById("goalFill").style.width = pct + "%";
+  document.getElementById("goalText").textContent = `${count} / ${DAILY_TARGET} 条`;
+  document.getElementById("todayCount").textContent = count;
+  document.getElementById("todayMoney").textContent = "¥" + (count * PRICE_PER_TASK).toFixed(2);
+  if (count > 0) {
+    const avgSec = state.daily.totalTime / count;
+    document.getElementById("avgTime").textContent = avgSec < 60 ? `${avgSec.toFixed(0)}秒` : `${(avgSec/60).toFixed(1)}分`;
+    const remaining = DAILY_TARGET - count;
+    if (remaining > 0) {
+      const etaMin = (remaining * avgSec) / 60;
+      document.getElementById("etaTime").textContent = etaMin < 60 ? `${etaMin.toFixed(0)}分` : `${(etaMin/60).toFixed(1)}时`;
+    } else {
+      document.getElementById("etaTime").textContent = "🎉 达标";
+    }
+  } else {
+    document.getElementById("avgTime").textContent = "--";
+    document.getElementById("etaTime").textContent = "--";
+  }
+}
 
 function exportJSON() { if (state.tasks.length === 0) { toast("暂无数据可导出", "error"); return; } download("annotations_" + Date.now() + ".json", "application/json", JSON.stringify(state.tasks, null, 2)); toast("JSON 已导出", "success"); }
 
 function exportCSV() {
   if (state.tasks.length === 0) { toast("暂无数据可导出", "error"); return; }
-  const headers = ["任务ID","模式","结果","创建时间","视频信息","维度分数","排除项","备注"];
+  const headers = ["任务ID","模式","结果","耗时(秒)","创建时间","视频信息","维度分数","排除项","备注"];
   const rows = state.tasks.map(t => {
     const scores = t.scores ? Object.entries(t.scores).map(([k,v]) => `D${k}:${v}`).join(";") : (t.dimensions ? Object.entries(t.dimensions).map(([k,v]) => `D${k}:${v.score||'-'}`).join(";") : "");
     const excl = t.exclusions ? Object.entries(t.exclusions).filter(([,v])=>v).map(([k])=>k).join("|") : "";
-    return [t.id, t.mode, t.result, t.createdAt, JSON.stringify(t.videoMeta||{}), scores, excl, (t.notes||"").replace(/"/g,'""')];
+    return [t.id, t.mode, t.result, (t.elapsedSec||"").toFixed(1), t.createdAt, JSON.stringify(t.videoMeta||{}), scores, excl, (t.notes||"").replace(/"/g,'""')];
   });
   const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
   download("annotations_" + Date.now() + ".csv", "text/csv;charset=utf-8", "\uFEFF" + csv);
@@ -265,12 +356,20 @@ function bindVideo() {
     const url = URL.createObjectURL(f);
     video.src = url; video.classList.add("show"); ph.classList.add("hidden");
     document.getElementById("taskId").value = f.name.replace(/\.[^.]+$/, "");
-    video.addEventListener("loadedmetadata", () => { document.getElementById("videoMeta").textContent = `${video.videoWidth}×${video.videoHeight} · ${formatTime(video.duration)}`; }, { once: true });
+    state.taskStartTime = Date.now();
+    video.addEventListener("loadedmetadata", () => {
+      document.getElementById("videoMeta").textContent = `${video.videoWidth}×${video.videoHeight} · ${formatTime(video.duration)}`;
+      video.play().catch(() => {});
+    }, { once: true });
   });
   document.getElementById("btnLoadUrl").addEventListener("click", () => {
     const url = document.getElementById("videoUrl").value.trim(); if (!url) return;
     video.src = url; video.classList.add("show"); ph.classList.add("hidden");
-    video.addEventListener("loadedmetadata", () => { document.getElementById("videoMeta").textContent = `${video.videoWidth}×${video.videoHeight} · ${formatTime(video.duration)}`; }, { once: true });
+    state.taskStartTime = Date.now();
+    video.addEventListener("loadedmetadata", () => {
+      document.getElementById("videoMeta").textContent = `${video.videoWidth}×${video.videoHeight} · ${formatTime(video.duration)}`;
+      video.play().catch(() => {});
+    }, { once: true });
   });
   const area = document.getElementById("videoArea");
   area.addEventListener("dragover", e => { e.preventDefault(); area.style.borderColor = "var(--primary)"; });
@@ -288,6 +387,11 @@ function buildRefContent() {
   return `<h3>整体流程</h3>
     <p><strong>高质量快筛：</strong>8 个维度均须为 4 分或 5 分；命中任一排除项直接过滤。</p>
     <p><strong>全维度评分：</strong>对 8 个维度逐项打分并勾选具体问题，用于 Reward Model 训练。</p>
+    <h3>⌨ 快捷键（快筛模式）</h3>
+    <p><strong>P</strong> = 一键通过（所有维度自动打 5 分并保存）</p>
+    <p><strong>S</strong> = 过滤（跳过该条）</p>
+    <p><strong>1-8</strong> = 勾选/取消对应排除项</p>
+    <p><strong>空格</strong> = 播放/暂停视频</p>
     <h3>Q&A 标注标准</h3>
     <div class="qa"><div class="q">口型属于声音质量还是台词保持？</div><p>口型问题归入「口唇同步」维度，按 1–5 分评分。</p></div>
     <div class="qa"><div class="q">语言清晰度 vs 发音模糊？</div><p>语言清晰度属于「声音质量」（音频本身是否清晰）；发音模糊、口齿不清属于「台词保持」（内容能否分辨）。</p></div>
